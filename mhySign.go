@@ -55,11 +55,11 @@ type Links struct {
 }
 
 func main() {
-	conlog(passlog("程序启动") + "\n")
-	defer conlog(warnlog("程序结束") + "\n")
 	programName = "mhySign"
-	programVersion = "0.1.0.20250410_1401"
+	programVersion = "0.1.1.20250410_1733"
 	programAuthor = "ysun"
+	conlog(passlog("程序启动") + "，版本" + programVersion + "\n")
+	defer conlog(warnlog("程序结束") + "\n")
 
 	userhome = userHomeDir() + slash + ".config" + slash + programName
 	databaseFilename = "mhy.db"
@@ -280,7 +280,7 @@ func userHomeDir() string {
 }
 func checkDatabase() bool {
 	settingFields = []string {"label", "setting"}
-	userFields = []string {"username", "password", "needResetPassword", "accountDisable", "enableSign", "workWeiBotKey", "dingDingBotToken", "SCKey", "cookieIDs"}
+	userFields = []string {"username", "password", "needResetPassword", "accountDisable", "enableSign", "workWeiBotKey", "dingDingBotToken", "SCTKey", "SC3Key", "cookieIDs"}
 	cookieFields = []string {"label", "region", "cookie", "userID"}
 	logFields = []string {"userID", "signTime", "log"}
 	datebaseFieldMap = make(map[string]string)
@@ -292,7 +292,8 @@ func checkDatabase() bool {
 	datebaseFieldMap["enableSign"] = "int"
 	datebaseFieldMap["workWeiBotKey"] = "text"
 	datebaseFieldMap["dingDingBotToken"] = "text"
-	datebaseFieldMap["SCKey"] = "text"
+	datebaseFieldMap["SCTKey"] = "text"
+	datebaseFieldMap["SC3Key"] = "text"
 	datebaseFieldMap["cookieIDs"] = "text"
 	datebaseFieldMap["label"] = "text"
 	datebaseFieldMap["region"] = "int"
@@ -511,11 +512,17 @@ func startSign(userid string) {
 	} else {
 		fmt.Println("未设置钉钉通知")
 	}
-	if user["SCKey"] != "" {
-		fmt.Print("方糖Server酱通知：")
-		logMsg += "方糖Server酱通知：" + FTSC(user["SCKey"], NotifyTitle, NotifyMsg) + "\n"
+	if user["SCTKey"] != "" {
+		fmt.Print("Server酱T通知：")
+		logMsg += "Server酱T通知：" + FTSC(user["SCTKey"], NotifyTitle, NotifyMsg) + "\n"
 	} else {
 		fmt.Println("未设置Server酱通知")
+	}
+	if user["SC3Key"] != "" {
+		fmt.Print("Server酱3通知：")
+		logMsg += "Server酱3通知：" + FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg) + "\n"
+	} else {
+		fmt.Println("未设置Server酱3通知")
 	}
 	saveLog(userid, (time.Now()).Format(layout), logMsg)
 }
@@ -684,9 +691,9 @@ func newConfig() {
 			dingDingBotToken = dingDingBotToken[strings.Index(dingDingBotToken, "send?access_token=") + 18:]
 		}
 	}
-	SCKey := ""
+	SCTKey := ""
 	fmt.Print("请输入方糖server酱的key(或直接回车留空跳过)：")
-	fmt.Scanf("%s", &SCKey)
+	fmt.Scanf("%s", &SCTKey)
 	
 	values := make(map[string]string)
 	values["label"] = label
@@ -694,7 +701,7 @@ func newConfig() {
 	values["cookie"] = cookie
 	values["workWeiBotKey"] = workWeiBotKey
 	values["dingDingBotToken"] = dingDingBotToken
-	values["SCKey"] = SCKey
+	values["SCTKey"] = SCTKey
 	err := saveConfig("cookie", values, 0)
 	if err != nil {
 		conlog(alertlog("保存失败！\n"))
@@ -779,6 +786,23 @@ func FTSC(key string, title string, msg string) string {
 	data1 := `
 {
 	"text": "` + title + `",
+	"desp": "` + msg1 + `"
+}`
+	res, _ := curl("POST", url, data1, head)
+	//fmt.Println(strconv.Unquote(res.Body))
+	fmt.Println(res.Body)
+	return res.Body
+}
+func FTSC3(key string, title string, msg string) string {
+	msg1 := strings.ReplaceAll(msg, "\n", "\\n\\n")
+	uid := key[4:]
+	uid = uid[0:strings.Index(uid, "t")]
+	url := "https://" + uid + ".push.ft07.com/send/" + key + ".send"
+	head := make(map[string]string)
+	head["Content-Type"] = "application/json"
+	data1 := `
+{
+	"title": "` + title + `",
 	"desp": "` + msg1 + `"
 }`
 	res, _ := curl("POST", url, data1, head)
@@ -1281,7 +1305,7 @@ func route_web(w http.ResponseWriter, r *http.Request) {
 		webcookie2 := webcookie1.Value
 		username := webcookie2[0:strings.Index(webcookie2, ":")]
 		userid := findConfig("user", "username", username)[0]
-		keys := "needResetPassword,accountDisable,enableSign,workWeiBotKey,dingDingBotToken,SCKey,cookieIDs"
+		keys := "needResetPassword,accountDisable,enableSign,workWeiBotKey,dingDingBotToken,SCTKey,SC3Key,cookieIDs"
 		result, _ := readConfig("user", keys, userid)
 		key_arr := strings.Split(keys, ",")
 		res_arr := strings.Split(result, "|")
@@ -1378,7 +1402,7 @@ Cookie：<br>
 <button name="form_cookie_add">提交</button>
 </form>
 
-<a>获取Cookie方法</a>`
+<a href="https://github.com/qkqpttgf/mhySign" target=_blank>获取Cookie方法</a>`
 				htmlOutput(w, html, 200, nil)
 				return
 			}
@@ -1510,7 +1534,8 @@ Cookie：<br>
 					values := make(map[string]string)
 					values["workWeiBotKey"] = data.Get("workWeiBotKey")
 					values["dingDingBotToken"] = data.Get("dingDingBotToken")
-					values["SCKey"] = data.Get("SCKey")
+					values["SCTKey"] = data.Get("SCTKey")
+					values["SC3Key"] = data.Get("SC3Key")
 					err := saveConfig("user", values, userid)
 					if err == nil {
 						html := `保存成功！<br>
@@ -1534,30 +1559,54 @@ Cookie：<br>
 			}
 			html += `<br>
 <a href="?log=view">查看签到历史</a><br>
-<form action="" method="post" name="form_notify">
+<form action="" method="post" name="form_notify" onsubmit="return notifyCheck(this);">
 	<h5>通知设置：</h5>
-	<a >获取方法</a>
+	<a href="https://github.com/qkqpttgf/mhySign" target=_blank>各种key获取方法</a>
 	<div>
 		企业微信机器人：<br>
 		https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=
-		<input type="text" name="workWeiBotKey" value="` + user["workWeiBotKey"] + `">
+		<input type="password" name="workWeiBotKey" value="` + user["workWeiBotKey"] + `">
 		<br>
 	</div>
 	<div>
 		钉钉机器人：<br>
 		https://oapi.dingtalk.com/robot/send?access_token=
-		<input type="text" name="dingDingBotToken" value="` + user["dingDingBotToken"] + `">
+		<input type="password" name="dingDingBotToken" value="` + user["dingDingBotToken"] + `">
 		<br>
 	</div>
 	<div>
-	方糖Server酱：<br>
+	<a href="https://sct.ftqq.com/sendkey">方糖Server酱(Turbo版)</a>：<br>
 		SendKey：
-		<input type="text" name="SCKey" value="` + user["SCKey"] + `">
+		<input type="password" name="SCTKey" value="` + user["SCTKey"] + `">
+		<br>
+	</div>
+	<div>
+	<a href="https://sc3.ft07.com/sendkey">方糖Server酱(3)</a>：<br>
+		SendKey：
+		<input type="password" name="SC3Key" value="` + user["SC3Key"] + `">
 		<br>
 	</div>
 	<button name="form_notify">提交</button>
 </form>
 <br>
+<script>
+function notifyCheck(e) {
+	if (e.SC3Key.value != "") {
+		let tmp = e.SC3Key.value;
+		if (tmp.substr(0,4) == "sctp") {
+			tmp = tmp.substr(4);
+			let t = tmp.indexOf("t");
+			if (t>0) {
+				let n = tmp.substr(0,t)*1;
+				if (n>0) return true;
+			}
+		}
+		alert("方糖Server酱3 SendKey 不对");
+		return false;
+	}
+	return true;
+}
+</script>
 <h5>Cookie设置：</h5>
 <a href="?cookie=add">添加cookie</a><br>
 `
