@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	//"bufio"
 	"context"
 	//"crypto/hmac"
 	"crypto/md5"
@@ -33,11 +33,14 @@ var dbFilePath string
 var cmd_Web bool
 var cmd_Admin bool
 var cmd_Sign bool
+var cmd_Reset bool
 
 var quit chan int
 var slash string
 var userhome string
 var databaseFilename string
+var mainCtx context.Context
+var mainCancel context.CancelFunc
 var settingFields []string
 var userFields []string
 var cookieFields []string
@@ -56,13 +59,19 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.1.20250410_1733"
+	programVersion = "0.1.2.20250411_1103"
 	programAuthor = "ysun"
-	conlog(passlog("程序启动") + "，版本" + programVersion + "\n")
+	conlog(passlog("程序启动") + "\n")
+	fmt.Println("  版本：" + programVersion)
 	defer conlog(warnlog("程序结束") + "\n")
+	mainCtx, mainCancel = context.WithCancel(context.Background())
+	quit = make(chan int, 1)
+	defer close(quit)
+	defer waitExiting()
 
 	userhome = userHomeDir() + slash + ".config" + slash + programName
 	databaseFilename = "mhy.db"
+
 	if !parseCommandLine() {
 		// 命令行不是期望的格式
 		conlog(alertlog("命令不对。") + "\n")
@@ -78,6 +87,10 @@ func main() {
 		return
 	}
 
+	if cmd_Reset {
+		resetAdminPassword()
+		return
+	}
 	if cmd_Web {
 		startSrv(wizAport())
 		return
@@ -142,6 +155,10 @@ func parseCommandLine() bool {
 			cmd_Sign = true
 			continue
 		}
+		if argv == "reset" {
+			cmd_Reset = true
+			continue
+		}
 		if argv == "-config" || argv == "-c" {
 			configFile = true
 			continue
@@ -161,6 +178,9 @@ func parseCommandLine() bool {
 	if cmd_Sign {
 		todoNum++
 	}
+	if cmd_Reset {
+		todoNum++
+	}
 	if todoNum > 1 {
 		conlog(alertlog("一次请只做一件事\n"))
 		return false
@@ -174,24 +194,31 @@ func parseCommandLine() bool {
 }
 func useage() {
 	html := `用法:
-` + os.Args[0] + ` [-c path/datafile] [admin | web | sign]
+` + os.Args[0] + ` [-c path/datafile] [admin | web | sign | reset]
   -c|-config PathOfDBfile   指定database位置
   admin                     开启一个有时效的临时网站用来管理
   web                       开启一个网站，让用户注册填写等
   sign                      开始签到
-
+  reset                     重置管理密码
 `
 	//fmt.Print(html)
 	conlog(html)
-	expireSecond := 10
-	quit = make(chan int, 1)
-	defer close(quit)
-	go displayCountdown("等 ", expireSecond, "s 或按 ctrl+c 退出。", quit)
-	go func() {
-		waitSYS()
-		quit <- -1
-	}()
-	<- quit
+}
+func waitExiting() {
+	select {
+		case <- mainCtx.Done() :
+			// ctx被杀掉了，说明有其它地方按ctrl c了
+			return
+		default :
+			mainCancel() // 没人杀，我来杀
+			expireSecond := 10
+			go displayCountdown("等 ", expireSecond, "s 或按 ctrl+c 退出。", quit)
+			go func() {
+				waitSYS()
+				quit <- -1
+			}()
+			<- quit
+	}
 }
 func initUrls() {
 	games = []string {"崩坏3", "原神", "星穹铁道", "绝区零"}
@@ -365,7 +392,24 @@ func checkDatabase() bool {
 		}
 	}
 }
-
+func resetAdminPassword() {
+	passid := findConfig("setting", "label", "adminpass")[0]
+	if passid < 0 {
+		fmt.Println("没有设置过管理员，请正常创建管理员。")
+		return
+	}
+	newPass := randomPassword()
+	err := setSetting("adminpass", md5Sum(newPass))
+	if err != nil {
+		fmt.Println(alertlog(" 重置失败："), err)
+		return
+	}
+	username := readSetting("adminuser")
+	fmt.Println(passlog("  重置成功！"))
+	fmt.Println("  用户名：", username)
+	fmt.Println("  新密码：", newPass)
+	return
+}
 func startSign(userid string) {
 	NotifyMsg := "\n"
 	layout := "2006-01-02 15:04:05 Monday"
@@ -516,7 +560,7 @@ func startSign(userid string) {
 		fmt.Print("Server酱T通知：")
 		logMsg += "Server酱T通知：" + FTSC(user["SCTKey"], NotifyTitle, NotifyMsg) + "\n"
 	} else {
-		fmt.Println("未设置Server酱通知")
+		fmt.Println("未设置Server酱T通知")
 	}
 	if user["SC3Key"] != "" {
 		fmt.Print("Server酱3通知：")
@@ -618,125 +662,6 @@ func signCheck(serverRegion int, game string, region string, game_uid string, co
 			return "网络问题"
 		}
 	}
-}
-
-func newConfig() {
-	conlog("添加cookie\n")
-	region := ""
-	fmt.Print(`请选择账号所在服务器区域：
-  0) 米游社（国服）
-  1) Hoyolab（国际服）
-`)
-	for ;region == ""; {
-		fmt.Print("按0或1：")
-		res := getChar()
-		fmt.Println("")
-		if res != "0" && res != "1" {
-			continue
-		} else {
-			region = res
-			if region == "0" {
-				fmt.Println("米游社")
-			}
-			if region == "1"{
-				fmt.Println("Hoyolab")
-			}
-			break
-		}
-		time.Sleep(time.Second * 1)
-	}
-	label := ""
-	for ;label == ""; {
-		fmt.Print("输入一个名称作为标签：")
-		fmt.Scanf("%s", &label)
-	}
-	//fmt.Println(label)
-	cookie := ""
-	for ;cookie == ""; {
-		fmt.Print("请在电脑网页上登录")
-		if region == "0" {
-			fmt.Print("米游社")
-		}
-		if region == "1"{
-			fmt.Print("Hoyolab")
-		}
-		fmt.Print("后，获取cookie(具体方法百度)，然后输入：")
-		//fmt.Scanf("%s", &cookie)
-		cookie, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-		cookie = cookie[0:len(cookie)-1]
-		if len(cookie) < 10 {
-			cookie = ""
-			continue
-		}
-		if cookie[0:1] == "\"" {
-			cookie = cookie[1:]
-		}
-		if cookie[len(cookie)-1:] == "\"" {
-			cookie = cookie[0:len(cookie)-1]
-		}
-	}
-	workWeiBotKey := ""
-	fmt.Print("请输入企业微信机器人链接或key(或直接回车留空跳过)：")
-	fmt.Scanf("%s", &workWeiBotKey)
-	if len(workWeiBotKey) > 0 {
-		if strings.Index(workWeiBotKey, "send?key=") > 9 {
-			workWeiBotKey = workWeiBotKey[strings.Index(workWeiBotKey, "send?key=") + 9:]
-		}
-	}
-	dingDingBotToken := ""
-	fmt.Print("请输入钉钉机器人链接或key(或直接回车留空跳过)：")
-	fmt.Scanf("%s", &dingDingBotToken)
-	if len(dingDingBotToken) > 0 {
-		if strings.Index(dingDingBotToken, "send?access_token=") > 9 {
-			dingDingBotToken = dingDingBotToken[strings.Index(dingDingBotToken, "send?access_token=") + 18:]
-		}
-	}
-	SCTKey := ""
-	fmt.Print("请输入方糖server酱的key(或直接回车留空跳过)：")
-	fmt.Scanf("%s", &SCTKey)
-	
-	values := make(map[string]string)
-	values["label"] = label
-	values["region"] = region
-	values["cookie"] = cookie
-	values["workWeiBotKey"] = workWeiBotKey
-	values["dingDingBotToken"] = dingDingBotToken
-	values["SCTKey"] = SCTKey
-	err := saveConfig("cookie", values, 0)
-	if err != nil {
-		conlog(alertlog("保存失败！\n"))
-		fmt.Println(err)
-	} else {
-		conlog(passlog("保存成功！\n"))
-	}
-}
-func editConfig(id int) error {
-	sql := "select "
-	for _, key := range cookieFields {
-		sql += key + ","
-	}
-	sql = sql[0:len(sql)-1]
-	sql += " from config where id=" + fmt.Sprint(id) + ";"
-	//fmt.Println(sql)
-	res, err := sqlite(sql)
-	if err != nil {
-		fmt.Println("Something wrong.")
-		return err
-	}
-	tmp := make(map[string]string)
-	num := 0
-	for _, key := range cookieFields {
-		if strings.Index(res, "|") > -1 {
-			tmp[key] = res[0:strings.Index(res, "|")]
-			res = res[strings.Index(res, "|")+1:]
-		} else {
-			tmp[key] = res
-		}
-		fmt.Println(warnlog(fmt.Sprint(num)) + ") " + key + "\t" + tmp[key])
-		num++
-	}
-	fmt.Println("还没做，复制一下，删了重新添加吧~")
-	return errors.New("")
 }
 func saveLog(userID string, signTime string, log string) {
 	log = strings.ReplaceAll(log, "\n", "\\n")
@@ -848,11 +773,10 @@ func waitSYS() {
 	defer close(sysSignalQuit)
 	signal.Notify(sysSignalQuit, syscall.SIGINT, syscall.SIGTERM)
 	<- sysSignalQuit
+	mainCancel()
 	fmt.Print("\n")
 }
 func wait_Web() {
-	quit = make(chan int, 1)
-	defer close(quit)
 	go func() {
 		waitSYS()
 		quit <- -1
@@ -867,14 +791,12 @@ func wait_Web() {
 func wait_Admin(expireSecond int) {
 	defer conlog("管理网页停止\n")
 	count := 0
-	quit = make(chan int, 1)
-	defer close(quit)
+	// 底部跑马灯文字
+	go displayHorseRaceLamp()
 	go func() {
 		waitSYS()
 		quit <- -1
 	}()
-	// 底部跑马灯文字
-	go displayHorseRaceLamp()
 	// 判断超时
 	for count > -1 {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -896,8 +818,9 @@ func wait_Admin(expireSecond int) {
 		// 等待网页路由触发传值，或上方Sleep后传值
 		count = <- quit
 		// 有值传入后，结束本次ctx，开始下一次循环
-		cancel();
+		cancel()
 	}
+
 }
 // 跑马灯显示字符，死循环，未考虑结束
 func displayHorseRaceLamp() {
@@ -906,13 +829,18 @@ func displayHorseRaceLamp() {
 	//fmt.Println(len(str), len(runstr))
 	count := 0
 	for count > -1 {
-		fmt.Print("\r" + string(runstr[0:count]))
-		time.Sleep(1 * time.Second)
-		count++
-		//fmt.Println(count)
-		if count > len(runstr) {
-			count = 0
-			clearCurrentLine(str)
+		select {
+			case <- mainCtx.Done() :
+				return
+			default :	
+				fmt.Print("\r" + string(runstr[0:count]))
+				time.Sleep(1 * time.Second)
+				count++
+				//fmt.Println(count)
+				if count > len(runstr) {
+					count = 0
+					clearCurrentLine(str)
+				}
 		}
 	}
 }
@@ -1102,7 +1030,7 @@ func findConfig(table string, key string, value string) []int {
 		return ids
 	}
 	sql := "select id from " + table + " where " + key + "=\"" + value + "\";"
-	id_string, err := sqlite(sql);
+	id_string, err := sqlite(sql)
 	if err != nil || id_string == "" {
 		ids = append(ids, -1)
 		return ids
@@ -1731,7 +1659,7 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 				userid := findConfig("user", "username", data.Get("user"))[0]
 				if userid > -1 {
 					html := `用户` + data.Get("user") + `已经存在！
-					<meta http-equiv="refresh" content="5;URL=">`
+<meta http-equiv="refresh" content="3;URL=">`
 					htmlOutput(w, html, 403, nil)
 					return
 				} else {
@@ -1743,10 +1671,11 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 					values["enableSign"] = readSetting("enableSign")
 					err := saveConfig("user", values, 0)
 					if err != nil {
-						html := `创建失败：` + fmt.Sprint(err)
+						html := `<a href=''>返回</a><br>创建失败：` + fmt.Sprint(err)
 						htmlOutput(w, html, 400, nil)
 					} else {
-						html := `创建成功！<br>
+						html := `<a href=''>返回</a><br>
+						创建成功！<br>
 						用户名：` + values["username"] + `<br>
 						密码：` + password
 						htmlOutput(w, html, 200, nil)
@@ -1770,6 +1699,22 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 		}
 		if path == "/" {
 			if r.Method == "POST" {
+				if formHasKey(r.PostForm, "form_modify_admin") {
+					// 修改密码
+					if data.Get("adminuser") != "" && data.Get("adminpass_old") != "" && data.Get("adminpass_new") != "" && data.Get("adminpass_new") == data.Get("adminpass_new1") {
+						if md5Sum(data.Get("adminpass_old")) == readSetting("adminpass") {
+							err := setSetting("adminuser", data.Get("adminuser"))
+							err1 := setSetting("adminpass", md5Sum(data.Get("adminpass_new")))
+							if err == nil || err1 == nil {
+								html := `成功<meta http-equiv="refresh" content="1;URL=">`
+								htmlOutput(w, html, 200, nil)
+								return
+							}
+						}
+					}
+					htmlOutput(w, "修改失败", 400, nil)
+					return
+				}
 				if formHasKey(r.PostForm, "form_setting") {
 				//if r.PostForm.Has("form_setting") {
 					// 设定
@@ -1777,14 +1722,12 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 						if k != "form_setting" {
 							err := setSetting(k, v[0])
 							if err != nil {
-								htmlOutput(w, "保存失败：" + fmt.Sprintln(err), 400, nil)
+								htmlOutput(w, "<a href=''>返回</a><br>保存失败：" + fmt.Sprintln(err), 400, nil)
 								return
 							}
 						}
 					}
-					html := `成功
-<meta http-equiv="refresh" content="3;URL=">
-`
+					html := `成功<meta http-equiv="refresh" content="3;URL=">`
 					htmlOutput(w, html, 200, nil)
 					return
 				}
@@ -1807,11 +1750,10 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 					}
 					err := saveConfig("user", values, id)
 					if err != nil {
-						html := `保存失败：` + fmt.Sprint(err)
+						html := `<a href=''>返回</a><br>保存失败：` + fmt.Sprint(err)
 						htmlOutput(w, html, 400, nil)
 					} else {
-						html := `<meta http-equiv="refresh" content="3;URL=">
-保存成功！`
+						html := `<meta http-equiv="refresh" content="3;URL=">保存成功！`
 						htmlOutput(w, html, 200, nil)
 					}
 					return
@@ -1842,53 +1784,71 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			adminuser := readSetting("adminuser")
 			enableRegist := readSetting("enableRegist")
 			enableSign := readSetting("enableSign")
-			html := `<title>管理</title>
-			<i>预留占位，修改管理员的用户名密码</i><br>
-			<form action="" method="post" name="form_setting">
-			设定：
-			<table>
-				<tr>
-					<td>游客能自行注册用户：</td>
-					<td>
-						<label><input type="radio" name="enableRegist" value="0"`
+			html := `
+<title>管理</title>
+<form action="" method="post" name="form_modify_admin" onsubmit="return check();">
+	<h4>修改管理员用户名与密码：</h4>
+	用户名：<input type="text" name="adminuser" value="` + adminuser + `"><br>
+	旧密码：<input type="password" name="adminpass_old" value=""><br>
+	新密码：<input type="password" name="adminpass_new" value=""><br>
+	再次输入新密码：<input type="password" name="adminpass_new1" value=""><br>
+	<button name="form_modify_admin">提交</button>
+</form>
+<script>
+	function check() {
+		if (document.form_modify_admin.adminpass_new.value != document.form_modify_admin.adminpass_new1.value) {
+			alert("两次密码不一样");
+			return false;
+		}
+		return true;
+	}
+</script>
+<form action="" method="post" name="form_setting">
+<h4>设定：</h4>
+<table>
+	<tr>
+		<td>游客能自行注册用户：</td>
+		<td>
+			<label><input type="radio" name="enableRegist" value="0"`
 			if enableRegist != "1" {
 				html += " checked"
 			}
 			html += `>否</label>
-						<label><input type="radio" name="enableRegist" value="1"`
+			<label><input type="radio" name="enableRegist" value="1"`
 			if enableRegist == "1" {
 				html += " checked"
 			}
 			html += `>是</label>
-					</td>
-				</tr>
-				<tr>
-					<td>默认新用户可以签到：</td>
-					<td>
-						<label><input type="radio" name="enableSign" value="0"`
+		</td>
+	</tr>
+	<tr>
+		<td>默认新用户可以签到：</td>
+		<td>
+			<label><input type="radio" name="enableSign" value="0"`
 			if enableSign != "1" {
 				html += " checked"
 			}
 			html += `>否</label>
-						<label><input type="radio" name="enableSign" value="1"`
+			<label><input type="radio" name="enableSign" value="1"`
 			if enableSign == "1" {
 				html += " checked"
 			}
 			html += `>是</label>
-					</td>
-				</tr>
-			</table>
-			<button name="form_setting">提交</button>
-			</form>
-			`
+		</td>
+	</tr>
+</table>
+<button name="form_setting">提交</button>
+</form>
+`
 			html += `
-			用户：
-			<a href="?adduser=manually">手动添加用户</a>
-			<table border="1">
-				<tr><td>id</td><td>用户名</td><td>Cookie ID</td><td>禁用账号</td><td>可以签到</td><td>操作</td></tr>
-			`
+<h4>用户：</h4>
+<a href="?adduser=manually">手动添加用户</a>
+<table border="1">
+	<tr><td>id</td><td>用户名</td><td>Cookie ID</td><td>禁用账号</td><td>可以签到</td><td>操作</td></tr>
+`
 			keys := "id,username,cookieIDs,accountDisable,enableSign"
 			result, _ := readConfig("user", keys, 0)
 			for _, line := range strSplitLine(result) {
@@ -1897,10 +1857,11 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 				}
 				userinfo := strings.Split(line, "|")
 				html += `
-			<form action="" method="post" name="form_user` + userinfo[0] + `">
-			<tr>`
+	<form action="" method="post" name="form_user` + userinfo[0] + `">
+	<tr>`
 				for i, v := range strings.Split(keys, ",") {
-					html += "<td>" 
+					html += `
+		<td>`
 					if v == "id" {
 						html += "<input type=\"text\" size=\"2\" name=\"" + v + "\" value=\"" + userinfo[i] + "\" readonly>"
 					}
@@ -1926,21 +1887,22 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 						}
 						html += ">"
 					}
-					html += "</td>"
+					html += `</td>`
 				}
 				//for i, v := range userinfo {
 				//	html += "<td>" + v + "</td>"
 				//}
-				html += `<td>
-				<button name="user_set">提交修改</button>
-				<button name="user_reset">重置密码</button>
-				</td>`
-				html += `</tr>
-			</form>`
+				html += `
+		<td>
+			<button name="user_set">提交修改</button>
+			<button name="user_reset">重置密码</button>
+		</td>`
+				html += `
+	</tr>
+	</form>`
 			}
 			html += `
-			</table>
-			`
+</table>`
 			htmlOutput(w, html, 200, nil)
 			return
 		}
