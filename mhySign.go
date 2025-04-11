@@ -59,7 +59,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.2.20250411_1103"
+	programVersion = "0.1.2.20250411_1350"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -411,7 +411,7 @@ func resetAdminPassword() {
 	return
 }
 func startSign(userid string) {
-	NotifyMsg := "\n"
+	NotifyMsg := ""
 	layout := "2006-01-02 15:04:05 Monday"
 	//startTime := (time.Now()).Format(layout)
 	conlog("用户id " + userid + " 开始：\n")
@@ -542,29 +542,33 @@ func startSign(userid string) {
 	logMsg := NotifyMsg
 	NotifyTitle := "米游社签到"
 	endTime := (time.Now()).Format(layout)
-	NotifyMsg = endTime + NotifyMsg
+	NotifyMsg = endTime + "\n" + NotifyMsg
 
 	if user["workWeiBotKey"] != "" {
-		fmt.Print("企业微信通知：")
-		logMsg += "企业微信通知：" + WorkWeiBot(user["workWeiBotKey"], NotifyTitle + "\n" + NotifyMsg) + "\n"
+		NotifyResult := WorkWeiBot(user["workWeiBotKey"], NotifyTitle + "\n" + NotifyMsg)
+		fmt.Println("企业微信通知：", NotifyResult)
+		logMsg += "企业微信通知：" + NotifyResult + "\n"
 	} else {
 		fmt.Println("未设置企业微信通知")
 	}
 	if user["dingDingBotToken"] != "" {
-		fmt.Print("钉钉通知：")
-		logMsg += "钉钉通知：" + DingDingBot(user["dingDingBotToken"], NotifyTitle + "\n" + NotifyMsg) + "\n"
+		NotifyResult := DingDingBot(user["dingDingBotToken"], NotifyTitle + "\n" + NotifyMsg)
+		fmt.Println("钉钉通知：", NotifyResult)
+		logMsg += "钉钉通知：" + NotifyResult + "\n"
 	} else {
 		fmt.Println("未设置钉钉通知")
 	}
 	if user["SCTKey"] != "" {
-		fmt.Print("Server酱T通知：")
-		logMsg += "Server酱T通知：" + FTSC(user["SCTKey"], NotifyTitle, NotifyMsg) + "\n"
+		NotifyResult := FTSC(user["SCTKey"], NotifyTitle, NotifyMsg)
+		fmt.Println("Server酱T通知：", NotifyResult)
+		logMsg += "Server酱T通知：" + NotifyResult + "\n"
 	} else {
 		fmt.Println("未设置Server酱T通知")
 	}
 	if user["SC3Key"] != "" {
-		fmt.Print("Server酱3通知：")
-		logMsg += "Server酱3通知：" + FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg) + "\n"
+		NotifyResult := FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg)
+		fmt.Println("Server酱3通知：", NotifyResult)
+		logMsg += "Server酱3通知：" + NotifyResult + "\n"
 	} else {
 		fmt.Println("未设置Server酱3通知")
 	}
@@ -684,8 +688,13 @@ func WorkWeiBot(key string, msg string) string {
 		}
 	}`
 	res, _ := curl("POST", url, data1, head)
-	fmt.Println(res.Body)
-	return res.Body
+	//fmt.Println(res.Body)
+	errcode := readValueInString(res.Body, "errcode")
+	if errcode == "0" {
+		return "成功"
+	} else {
+		return res.Body
+	}
 }
 func DingDingBot(token string, msg string) string {
 	msg1 := strings.ReplaceAll(msg, "\"", "")
@@ -700,23 +709,30 @@ func DingDingBot(token string, msg string) string {
 		}
 	}`
 	res, _ := curl("POST", url, data1, head)
-	fmt.Println(res.Body)
-	return res.Body
+	errcode := readValueInString(res.Body, "errcode")
+	if errcode == "0" {
+		return "成功"
+	} else {
+		return res.Body
+	}
 }
 func FTSC(key string, title string, msg string) string {
 	msg1 := strings.ReplaceAll(msg, "\n", "\\n\\n")
 	url := "https://sctapi.ftqq.com/" + key + ".send"
 	head := make(map[string]string)
 	head["Content-Type"] = "application/json"
-	data1 := `
-{
+	data1 := `{
 	"text": "` + title + `",
 	"desp": "` + msg1 + `"
 }`
 	res, _ := curl("POST", url, data1, head)
 	//fmt.Println(strconv.Unquote(res.Body))
-	fmt.Println(res.Body)
-	return res.Body
+	errcode := readValueInString(res.Body, "code")
+	if errcode == "0" {
+		return "成功"
+	} else {
+		return res.Body
+	}
 }
 func FTSC3(key string, title string, msg string) string {
 	msg1 := strings.ReplaceAll(msg, "\n", "\\n\\n")
@@ -725,15 +741,17 @@ func FTSC3(key string, title string, msg string) string {
 	url := "https://" + uid + ".push.ft07.com/send/" + key + ".send"
 	head := make(map[string]string)
 	head["Content-Type"] = "application/json"
-	data1 := `
-{
+	data1 := `{
 	"title": "` + title + `",
 	"desp": "` + msg1 + `"
 }`
 	res, _ := curl("POST", url, data1, head)
-	//fmt.Println(strconv.Unquote(res.Body))
-	fmt.Println(res.Body)
-	return res.Body
+	errcode := readValueInString(res.Body, "code")
+	if errcode == "0" {
+		return "成功"
+	} else {
+		return res.Body
+	}
 }
 func getChar() string {
 	b := make([]byte, 1)
@@ -811,7 +829,7 @@ func wait_Admin(expireSecond int) {
 				default :
 					// ctx存活，说明其它地方无操作
 					// 超时，给通道传值结束程序
-					conlog("Timeout\n")
+					conlog("时间到\n")
 					quit <- -1
 			}
 		}()
@@ -2205,20 +2223,18 @@ func htmlOutput(w http.ResponseWriter, body string, code int, head map[string]st
 		head = make(map[string]string)
 	}
 	_, ok := head["Content-Type"]
-	if ok && strings.Index(head["Content-Type"], "text/html")<0 {
-	} else {
-		if ok {
-			w.Header().Set("Content-Type", head["Content-Type"])
-		} else {
-			w.Header().Set("Content-Type", "text/html")
-		}
-	body = `
+	if !ok {
+		head["Content-Type"] = "text/html"
+	}
+	if strings.Index(head["Content-Type"], "text/html")>-1 {
+		body = `
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 ` + body
 	}
 	head["Server"] = programName + "/" + programVersion + " (" + programAuthor + ")"
 
+	//w.Header().Set("Content-Type", head["Content-Type"])
 	for k, v := range head {
 		w.Header().Add(k, v)
 	}
