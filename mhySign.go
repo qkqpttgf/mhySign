@@ -59,7 +59,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.2.20250411_1350"
+	programVersion = "0.1.3.20250412_1144"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -87,6 +87,7 @@ func main() {
 		return
 	}
 
+		initUrls()
 	if cmd_Reset {
 		resetAdminPassword()
 		return
@@ -100,7 +101,6 @@ func main() {
 		return
 	}
 	if cmd_Sign {
-		initUrls()
 		//fmt.Println(urls[0]["崩坏3"].getRoleUrl)
 		ids, _ := readConfig("user", "id", 0)
 		//fmt.Println("_" + ids + "_")
@@ -399,7 +399,7 @@ func resetAdminPassword() {
 		return
 	}
 	newPass := randomPassword()
-	err := setSetting("adminpass", md5Sum(newPass))
+	err := setSetting("adminpass", newPass)
 	if err != nil {
 		fmt.Println(alertlog(" 重置失败："), err)
 		return
@@ -539,6 +539,9 @@ func startSign(userid string) {
 		}
 		conlog(" Cookie " + id + " 结束。\n")
 	}
+	if NotifyMsg[len(NotifyMsg)-1:] == "\n" {
+		NotifyMsg = NotifyMsg[0:len(NotifyMsg)-1]
+	}
 	logMsg := NotifyMsg
 	NotifyTitle := "米游社签到"
 	endTime := (time.Now()).Format(layout)
@@ -547,28 +550,28 @@ func startSign(userid string) {
 	if user["workWeiBotKey"] != "" {
 		NotifyResult := WorkWeiBot(user["workWeiBotKey"], NotifyTitle + "\n" + NotifyMsg)
 		fmt.Println("企业微信通知：", NotifyResult)
-		logMsg += "企业微信通知：" + NotifyResult + "\n"
+		logMsg += "\n" + "企业微信通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置企业微信通知")
 	}
 	if user["dingDingBotToken"] != "" {
 		NotifyResult := DingDingBot(user["dingDingBotToken"], NotifyTitle + "\n" + NotifyMsg)
 		fmt.Println("钉钉通知：", NotifyResult)
-		logMsg += "钉钉通知：" + NotifyResult + "\n"
+		logMsg += "\n" + "钉钉通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置钉钉通知")
 	}
 	if user["SCTKey"] != "" {
 		NotifyResult := FTSC(user["SCTKey"], NotifyTitle, NotifyMsg)
 		fmt.Println("Server酱T通知：", NotifyResult)
-		logMsg += "Server酱T通知：" + NotifyResult + "\n"
+		logMsg += "\n" + "Server酱T通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置Server酱T通知")
 	}
 	if user["SC3Key"] != "" {
 		NotifyResult := FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg)
 		fmt.Println("Server酱3通知：", NotifyResult)
-		logMsg += "Server酱3通知：" + NotifyResult + "\n"
+		logMsg += "\n" + "Server酱3通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置Server酱3通知")
 	}
@@ -666,6 +669,51 @@ func signCheck(serverRegion int, game string, region string, game_uid string, co
 			return "网络问题"
 		}
 	}
+}
+func checkMHYCookie(region string, cookie string) bool {
+	/*url := "https://bbs-api.miyoushe.com/user/wapi/getUserFullInfo?gids=2"
+	if region == "1" {
+		url = "https://bbs-api-os.hoyolab.com/community/user/wapi/getUserFullInfo?gid=2" // 弃用，需要程序在外网
+	}
+
+	salt1 := "rtvTthKxEyreVXQCnhluFgLXPOFKPHlA"
+	time1 := fmt.Sprint(time.Now().Unix())
+	random1 := "ysun65"
+	md51 := md5Sum("salt=" + salt1 + "&t=" + time1 + "&r=" + random1)
+
+	head := make(map[string]string)
+	head["User-Agent"] = "Android; miHoYoBBS/2.71.1"
+	head["Cookie"] = cookie
+	head["Content-Type"] = "application/json"
+	head["x-rpc-device_id"] = "F84E53D45BFE4424ABEA9D6F0205FF4A"
+	head["x-rpc-app_version"] = "2.71.1"
+	head["x-rpc-client_type"] = "5"
+	if region == "1" {
+		head["referer"] = "https://act.hoyolab.com/"
+	} else {
+		head["referer"] = "https://www.miyoushe.com/"
+	}
+	head["DS"] = time1 + "," + random1 + "," + md51
+
+	res, err := curl("GET", url, "", head)*/
+
+	head := make(map[string]string)
+	head["Cookie"] = cookie
+	serverRegion, _ := strconv.Atoi(region)
+	res, err := curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
+	time.Sleep(time.Second * 1)
+	if err == nil {
+		//fmt.Println(res.Body)
+		retcode := readValueInString(res.Body, "retcode")
+		if retcode == "0" {
+			return true
+		} else {
+			fmt.Println(res.Body)
+		}
+	} else {
+		fmt.Println(err)
+	}
+	return false
 }
 func saveLog(userID string, signTime string, log string) {
 	log = strings.ReplaceAll(log, "\n", "\\n")
@@ -995,6 +1043,9 @@ func saveConfig(table string, key_value map[string]string, id int) error {
 			values := ""
 			for key, value := range key_value {
 				keys += key + ", "
+				if key == "password" {
+					value = md5Sum(value)
+				}
 				values += "\"" + value + "\", "
 			}
 			keys = keys[0:strings.LastIndex(keys, ",")]
@@ -1005,6 +1056,9 @@ func saveConfig(table string, key_value map[string]string, id int) error {
 		} else {
 			keys := ""
 			for key, value := range key_value {
+				if key == "password" {
+					value = md5Sum(value)
+				}
 				keys += key + "=\"" + value + "\", "
 			}
 			keys = keys[0:strings.LastIndex(keys, ",")]
@@ -1259,13 +1313,17 @@ func route_web(w http.ResponseWriter, r *http.Request) {
 		for i:=0;i<len(key_arr);i++ {
 			user[key_arr[i]] = res_arr[i]
 		}
+		if user["accountDisable"] == "1" {
+			htmlOutput(w, "账号被禁", 401, nil)
+			return
+		}
 		if path == "/" {
 			if query.Get("modify") == "password" {
 				html :=`<title>修改密码</title>`
 				if r.Method == "POST" && data.Get("oldpass") != "" && data.Get("newPass") != "" && data.Get("newPass") == data.Get("pass1") {
 					if checkUserPassword(userid, data.Get("oldpass")) {
 						values := make(map[string]string)
-						values["password"] = md5Sum(data.Get("newPass"))
+						values["password"] = data.Get("newPass")
 						values["needResetPassword"] = "0"
 						err := saveConfig("user", values, userid)
 						if err == nil {
@@ -1310,10 +1368,19 @@ func route_web(w http.ResponseWriter, r *http.Request) {
 			if query.Get("cookie") == "add" {
 				if r.Method == "POST" && data.Get("cookie") != "" {
 					//fmt.Println(data)
+					cookie1 := strings.ReplaceAll(data.Get("cookie"), "\r", "")
+					cookie1 = strings.ReplaceAll(cookie1, "\n", "")
+					cookie1 = strings.ReplaceAll(cookie1, "'", "")
+					cookie1 = strings.ReplaceAll(cookie1, "\"", "")
+					if !checkMHYCookie(data.Get("region"), cookie1) {
+						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对`
+						htmlOutput(w, html, 400, nil)
+						return
+					}
 					values := make(map[string]string)
 					values["label"] = data.Get("label")
 					values["region"] = data.Get("region")
-					values["cookie"] = data.Get("cookie")
+					values["cookie"] = cookie1
 					values["userID"] = fmt.Sprint(userid)
 					err := saveConfig("cookie", values, 0)
 					if err == nil {
@@ -1375,10 +1442,19 @@ Cookie：<br>
 				cookie["cookie"] = tmp[3]
 				if r.Method == "POST" && data.Get("cookie") != "" {
 					//fmt.Println(data)
+					cookie1 := strings.ReplaceAll(data.Get("cookie"), "\r", "")
+					cookie1 = strings.ReplaceAll(cookie1, "\n", "")
+					cookie1 = strings.ReplaceAll(cookie1, "'", "")
+					cookie1 = strings.ReplaceAll(cookie1, "\"", "")
+					if !checkMHYCookie(data.Get("region"), cookie1) {
+						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对`
+						htmlOutput(w, html, 400, nil)
+						return
+					}
 					values := make(map[string]string)
 					values["label"] = data.Get("label")
 					values["region"] = data.Get("region")
-					values["cookie"] = data.Get("cookie")
+					values["cookie"] = cookie1
 					err := saveConfig("cookie", values, cookieid)
 					if err == nil {
 						html := `保存成功！<br>
@@ -1632,7 +1708,7 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 		if data.Get("adminuser") != "" && data.Get("adminpass") != "" && data.Get("adminpass1") != "" && data.Get("adminpass") == data.Get("adminpass1") {
 			conlog("  Setting admin\n")
 			err := setSetting("adminuser", data.Get("adminuser"))
-			err1 := setSetting("adminpass", md5Sum(data.Get("adminpass")))
+			err1 := setSetting("adminpass", data.Get("adminpass"))
 			if err != nil || err1 != nil {
 				conlog(fmt.Sprintln("  Set admin failed\n", err))
 				html := `failed
@@ -1684,15 +1760,15 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 					values := make(map[string]string)
 					values["username"] = data.Get("user")
 					password := randomPassword()
-					values["password"] = md5Sum(password)
+					values["password"] = password
 					values["needResetPassword"] = "1"
 					values["enableSign"] = readSetting("enableSign")
 					err := saveConfig("user", values, 0)
 					if err != nil {
-						html := `<a href=''>返回</a><br>创建失败：` + fmt.Sprint(err)
+						html := `<a href='/'>返回</a><br>创建失败：` + fmt.Sprint(err)
 						htmlOutput(w, html, 400, nil)
 					} else {
-						html := `<a href=''>返回</a><br>
+						html := `<a href='/'>返回</a><br>
 						创建成功！<br>
 						用户名：` + values["username"] + `<br>
 						密码：` + password
@@ -1722,7 +1798,7 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 					if data.Get("adminuser") != "" && data.Get("adminpass_old") != "" && data.Get("adminpass_new") != "" && data.Get("adminpass_new") == data.Get("adminpass_new1") {
 						if md5Sum(data.Get("adminpass_old")) == readSetting("adminpass") {
 							err := setSetting("adminuser", data.Get("adminuser"))
-							err1 := setSetting("adminpass", md5Sum(data.Get("adminpass_new")))
+							err1 := setSetting("adminpass", data.Get("adminpass_new"))
 							if err == nil || err1 == nil {
 								html := `成功<meta http-equiv="refresh" content="1;URL=">`
 								htmlOutput(w, html, 200, nil)
@@ -1782,7 +1858,7 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 					//fmt.Println("reset", id)
 					values := make(map[string]string)
 					password := randomPassword()
-					values["password"] = md5Sum(password)
+					values["password"] = password
 					values["needResetPassword"] = "1"
 					err := saveConfig("user", values, id)
 					if err != nil {
@@ -1940,6 +2016,9 @@ func readSetting(key string) string {
 	return value
 }
 func setSetting(key string, value string) error {
+	if key == "adminpass" {
+		value = md5Sum(value)
+	}
 	id := findConfig("setting", "label", key)[0]
 	if id < 0 {
 		sql := "insert into setting (label, setting) values (\"" + key + "\", \"" + value + "\");"
@@ -2056,7 +2135,7 @@ func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 	}
 	if query.Get("adduser") == "regist" {
 		if readSetting("enableRegist") != "1" {
-			htmlOutput(w, `请在管理界面允许用户注册！
+			htmlOutput(w, `请通知管理员在管理界面允许游客注册！
 <meta http-equiv="refresh" content="4;URL=/">`, 401, nil)
 			return false
 		}
@@ -2069,7 +2148,7 @@ func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 			} else {
 				values := make(map[string]string)
 				values["username"] = data.Get("user")
-				values["password"] = md5Sum(data.Get("pass"))
+				values["password"] = data.Get("pass")
 				values["enableSign"] = readSetting("enableSign")
 				err := saveConfig("user", values, 0)
 				if err != nil {
