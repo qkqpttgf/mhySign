@@ -59,7 +59,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.3.20250412_1144"
+	programVersion = "0.1.3.20250412_1320"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -473,6 +473,9 @@ func startSign(userid string) {
 				cookie[key] = res
 			}
 		}
+		if cookie["cookie"] == "" {
+			continue
+		}
 		fmt.Println(" " + cookie["label"] + ",")
 		NotifyMsg += cookie["label"] + ":\n"
 		serverRegion, _ := strconv.Atoi(cookie["region"])
@@ -601,40 +604,45 @@ func sign(serverRegion int, game string, region string, game_uid string, cookie 
 	head["x-rpc-signgame"] = urls[serverRegion][game].signgame
 
 	res, err := curl("POST", urls[serverRegion][game].signUrl, data1, head)
-	time.Sleep(time.Second * 1)
+	for i:=0;i<3;i++ {
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second * 1)
+		res, err = curl("POST", urls[serverRegion][game].signUrl, data1, head)
+	}
 	if err != nil {
-		fmt.Print(err)
+		//fmt.Print(err)
 		return fmt.Sprint(err)
-	} else {
-		if res.StatusCode == 200 {
-			retcode := readValueInString(res.Body, "retcode")
-			if retcode == "0" {
-				success := readValueInString(res.Body, "success")
-				if success == "0" {
-					//签到成功
-					return "0"
-				} else {
-					is_risk := readValueInString(res.Body, "is_risk")
-					if is_risk == "true" {
-						return "有验证码"
-					} else {
-						return res.Body
-					}
-				}
+	}
+	if res.StatusCode == 200 {
+		retcode := readValueInString(res.Body, "retcode")
+		if retcode == "0" {
+			success := readValueInString(res.Body, "success")
+			if success == "0" {
+				//签到成功
+				return "0"
 			} else {
-				if retcode == "-5003" {
-					fmt.Print("已经签过")
+				is_risk := readValueInString(res.Body, "is_risk")
+				if is_risk == "true" {
+					return "有验证码"
 				} else {
-					fmt.Print("出错")
+					return res.Body
 				}
-				message := readValueInString(res.Body, "message")
-				//fmt.Println(message)
-				return message
 			}
 		} else {
-			fmt.Println("网络问题")
-			return "网络问题"
+			if retcode == "-5003" {
+				fmt.Print("已经签过")
+			} else {
+				fmt.Print("出错")
+			}
+			message := readValueInString(res.Body, "message")
+			//fmt.Println(message)
+			return message
 		}
+	} else {
+		fmt.Println("网络问题")
+		return "网络问题"
 	}
 }
 func signCheck(serverRegion int, game string, region string, game_uid string, cookie string) string {
@@ -701,7 +709,13 @@ func checkMHYCookie(region string, cookie string) bool {
 	head["Cookie"] = cookie
 	serverRegion, _ := strconv.Atoi(region)
 	res, err := curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
-	time.Sleep(time.Second * 1)
+	for i:=0;i<3;i++ {
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Second * 1)
+		res, err = curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
+	}
 	if err == nil {
 		//fmt.Println(res.Body)
 		retcode := readValueInString(res.Body, "retcode")
@@ -1373,7 +1387,7 @@ func route_web(w http.ResponseWriter, r *http.Request) {
 					cookie1 = strings.ReplaceAll(cookie1, "'", "")
 					cookie1 = strings.ReplaceAll(cookie1, "\"", "")
 					if !checkMHYCookie(data.Get("region"), cookie1) {
-						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对`
+						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对，请检查里面应该含有 cookie_token 或 cookie_token_v2 字样`
 						htmlOutput(w, html, 400, nil)
 						return
 					}
@@ -1447,7 +1461,7 @@ Cookie：<br>
 					cookie1 = strings.ReplaceAll(cookie1, "'", "")
 					cookie1 = strings.ReplaceAll(cookie1, "\"", "")
 					if !checkMHYCookie(data.Get("region"), cookie1) {
-						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对`
+						html := `<meta http-equiv="refresh" content="3;URL=/">Cookie不对，请检查里面应该含有 cookie_token 或 cookie_token_v2 字样`
 						htmlOutput(w, html, 400, nil)
 						return
 					}
@@ -1513,6 +1527,14 @@ Cookie：<br>
 				cookie["cookie"] = tmp[3]
 				err = delConfig("cookie", cookieid)
 				if err == nil {
+					tmp := findConfig("cookie", "userID", fmt.Sprint(userid))
+					tmp1 := make([]string, 0)
+					if tmp[0] != -1 {
+						for _, v := range tmp {
+							tmp1 = append(tmp1, fmt.Sprint(v))
+						}
+					}
+					saveConfig("user", map[string]string {"cookieIDs": strings.Join(tmp1, ",")}, userid)
 					html := `删除成功！<br><meta http-equiv="refresh" content="2;URL=/">`
 					htmlOutput(w, html, 200, nil)
 					return
@@ -2334,9 +2356,7 @@ func curl(method string, url string, data string, header map[string]string) (Htt
 	}
 	var req *http.Request
 	req, err = http.NewRequest(method, url, strings.NewReader(data))
-	if err != nil {
-		fmt.Println(err)
-	} else {
+	if err == nil {
 		if header == nil {
 			header = make(map[string]string)
 		}
@@ -2349,9 +2369,7 @@ func curl(method string, url string, data string, header map[string]string) (Htt
 		client := &http.Client{}
 		var res *http.Response
 		res, err = client.Do(req)
-		if err != nil {
-			fmt.Println(err)
-		} else {
+		if err == nil {
 			//fmt.Println(res.StatusCode)
 			//fmt.Println(res.Header)
 			//fmt.Println(res.Body)
@@ -2359,9 +2377,7 @@ func curl(method string, url string, data string, header map[string]string) (Htt
 			result.Header = res.Header
 			var body []byte
 			body, err = ioutil.ReadAll(res.Body)
-			if err != nil {
-				fmt.Println(err)
-			} else {
+			if err == nil {
 				//fmt.Println(string(body))
 				result.Body = string(body)
 			}
