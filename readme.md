@@ -4,10 +4,15 @@
 要签到时，运行`mhySign sign`，程序将会把数据库中的能签到的用户全签到一次；推荐加入计划任务(windows)或crontab(linux)以每天定时签到。  
   
 ### 米游社获取cookie：  
-浏览器打开 [米游社·原神](https://www.miyoushe.com/ys/) ，点右上角头像登录后，按F12，在Console（控制台）中输入`document.cookie`，回车，在出现的字符串上右击，Copy string contents，就复制好了。  
+浏览器打开 [米游社·原神](https://www.miyoushe.com/ys/) ，点右上角头像登录后，按F12，找到Network(网络)标签页，在上半部分有个Filter输入getUser，此时在中部应该能筛选到 getUserGameUnreadCount （如果空白，请刷新一下网页试试），  
+点击它，在出现的小框中选择Headers(头)，向下滚找到Cookie（注意不是Set-Cookie），将它右边的字符串选择复制即可。  
+如果觉得这个小框太小了不方便找，请对 getUserGameUnreadCount 右击，Copy，Copy as cURL(bash)，桌面或随便哪里新建一个TXT文本文档，把刚刚复制的粘贴进去，其它行都是 -H 开头，应该只有一行是 -b 开头，把这一行单引号里的东西复制一下。  
+请注意识别，这个cookie里面应该含有 cookie_token 或 cookie_token_v2 字样。  
 注意不要点退出登录。  
 ### Hoyolab获取cookie：  
-浏览器打开 [Hoyolab](https://www.hoyolab.com/home) （记得要FQ），点右上角头像登录后，按F12，在Console（控制台）中输入`document.cookie`，回车，在出现的字符串上右击，Copy string contents，就复制好了。  
+浏览器打开 [Hoyolab](https://www.hoyolab.com/home) （记得要FQ，不然不给打开），点右上角头像登录后，按F12，找到Network(网络)标签页，在上半部分有个Filter输入getUser，此时在中部应该能筛选到 getUserUnreadCount （如果空白，请刷新一下网页试试），  
+接下来操作参考上一条米游社，  
+请注意识别，这个cookie里面应该含有 cookie_token 或 cookie_token_v2 字样。  
 注意不要点退出登录。  
   
 ### 企业微信机器人：  
