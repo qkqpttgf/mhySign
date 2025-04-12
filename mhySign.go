@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	//"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -59,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.3.20250412_1320"
+	programVersion = "0.1.3.20250412_1522"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -590,7 +591,8 @@ func sign(serverRegion int, game string, region string, game_uid string, cookie 
 
 	salt1 := "rtvTthKxEyreVXQCnhluFgLXPOFKPHlA"
 	time1 := fmt.Sprint(time.Now().Unix())
-	random1 := "ysun65"
+	//random1 := "ysun65"
+	random1 := randomPassword()[0:6]
 	md51 := fmt.Sprintf("%x", md5.Sum([]byte("salt=" + salt1 + "&t=" + time1 + "&r=" + random1)))
 
 	head := make(map[string]string)
@@ -1551,22 +1553,29 @@ Cookie：<br>
 <a href="/">返回</a><br>
 只显示最近31条：`
 				if result_a != "" {
-					html += `<table border="1">`
+					html += `
+<table border="1">`
 					for _, result_b := range strSplitLine(result_a) {
 						if result_b != "" {
 							result := strings.Split(result_b, "|")
-							html += "<tr>"
+							html += `
+	<tr>`
 							if len(result)>1 {
-								html += "<td>" + strings.ReplaceAll(result[2], " ", "<br>") + "</td>"
-								html += "<td><pre>" + strings.ReplaceAll(result[3], "\\n", "<br>") + "</pre></td>"
+								html += `
+		<td>` + strings.ReplaceAll(result[2], " ", "<br>") + `</td>`
+								html += `
+		<td><pre>` + strings.ReplaceAll(result[3], "\\n", "<br>") + `</pre></td>`
 								//html += "<td>" + result[3] + "</td>"
 							} else {
-								html += "<td>" + result[0] + "</td>"
+								html += `
+		<td>` + result[0] + `</td>`
 							}
-							html += "</tr>"
+							html += `
+	</tr>`
 						}
 					}
-					html += `</table>`
+					html += `
+</table>`
 				}
 				htmlOutput(w, html, 200, nil)
 				return
@@ -2135,6 +2144,21 @@ func randomPassword() string {
 	}
 	return result
 }
+// 判断字符串是否为字母数字
+/*func IsAlphaNumeric(str string) bool {
+    // 使用正则表达式匹配字母数字
+    reg := regexp.MustCompile("^[a-zA-Z0-9]+$")
+    return reg.MatchString(str)
+}*/
+func IsAlphaNumeric(str string) bool {
+    // 遍历字符串，判断每个字符是否为字母数字
+    for _, ch := range str {
+        if !strings.ContainsRune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", ch) {
+            return false
+        }
+    }
+    return true
+}
 func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 	r.ParseForm()
 	//fmt.Println(r)
@@ -2162,26 +2186,28 @@ func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 			return false
 		}
 		if r.Method == "POST" && data.Get("user") != "" && data.Get("pass") != "" && data.Get("pass1") != "" && data.Get("pass") == data.Get("pass1") {
+			if !IsAlphaNumeric(data.Get("user")) {
+				html := `用户名只允许字母与数字！<meta http-equiv="refresh" content="2;URL=">`
+				htmlOutput(w, html, 400, nil)
+				return false
+			}
 			userid := findConfig("user", "username", data.Get("user"))[0]
 			if userid > -1 {
-				html := `用户` + data.Get("user") + `已经存在！
-				<meta http-equiv="refresh" content="5;URL=">`
+				html := `用户` + data.Get("user") + `已经存在！<meta http-equiv="refresh" content="5;URL=">`
 				htmlOutput(w, html, 403, nil)
+				return false
+			}
+			values := make(map[string]string)
+			values["username"] = data.Get("user")
+			values["password"] = data.Get("pass")
+			values["enableSign"] = readSetting("enableSign")
+			err := saveConfig("user", values, 0)
+			if err != nil {
+				html := `<meta http-equiv="refresh" content="5;URL=">创建失败：` + fmt.Sprint(err)
+				htmlOutput(w, html, 400, nil)
 			} else {
-				values := make(map[string]string)
-				values["username"] = data.Get("user")
-				values["password"] = data.Get("pass")
-				values["enableSign"] = readSetting("enableSign")
-				err := saveConfig("user", values, 0)
-				if err != nil {
-					html := `<meta http-equiv="refresh" content="5;URL=">
-创建失败：` + fmt.Sprint(err)
-					htmlOutput(w, html, 400, nil)
-				} else {
-					html := `注册成功！
-	<meta http-equiv="refresh" content="2;URL=/">`
-					htmlOutput(w, html, 200, nil)
-				}
+				html := `注册成功！<meta http-equiv="refresh" content="2;URL=/">`
+				htmlOutput(w, html, 200, nil)
 			}
 			return false
 		} else {
