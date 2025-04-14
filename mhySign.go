@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.3.20250412_1522"
+	programVersion = "0.1.4.20250414_1048"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -482,8 +482,7 @@ func startSign(userid string) {
 		for _, key := range games {
 			fmt.Print("  " + key + "，")
 			NotifyMsg += "  " + key + "，"
-			head := make(map[string]string)
-			head["Cookie"] = cookie["cookie"]
+			head := mhyCommonHeader(cookie["cookie"])
 			res, err := curl("GET", urls[serverRegion][key].getRoleUrl, "",  head)
 			time.Sleep(time.Second * 1)
 			if err == nil && res.StatusCode == 200 {
@@ -519,13 +518,13 @@ func startSign(userid string) {
 								fmt.Println("签到成功，本月共签" + checkedDay + "天")
 								NotifyMsg += "签到成功，本月共签" + checkedDay + "天\n"
 							} else {
-								fmt.Println(signRes)
+								//fmt.Println(signRes)
 								NotifyMsg += signRes + "\n"
 							}
 						} else {
 							_, err = strconv.Atoi(checkedDay)
 							if err != nil {
-								fmt.Println(checkedDay)
+								//fmt.Println(checkedDay)
 								NotifyMsg += checkedDay + "\n"
 							} else {
 								fmt.Println("今日签过，本月已签" + checkedDay + "天")
@@ -584,6 +583,22 @@ func startSign(userid string) {
 	}
 	saveLog(userid, (time.Now()).Format(layout), logMsg)
 }
+func mhyCommonHeader(cookie string) map[string]string {
+	salt1 := "rtvTthKxEyreVXQCnhluFgLXPOFKPHlA"
+	time1 := fmt.Sprint(time.Now().Unix())
+	//random1 := "ysun65"
+	random1 := randomPassword()[0:6]
+	md51 := md5Sum("salt=" + salt1 + "&t=" + time1 + "&r=" + random1)
+
+	head := make(map[string]string)
+	head["User-Agent"] = "Android; miHoYoBBS/2.71.1"
+	head["Cookie"] = cookie
+	head["x-rpc-device_id"] = "F84E53D45BFE4424ABEA9D6F0205FF4A"
+	head["x-rpc-app_version"] = "2.71.1"
+	head["x-rpc-client_type"] = "5"
+	head["DS"] = time1 + "," + random1 + "," + md51
+	return head
+}
 func sign(serverRegion int, game string, region string, game_uid string, cookie string) string {
 	data1 := `
 {
@@ -592,20 +607,8 @@ func sign(serverRegion int, game string, region string, game_uid string, cookie 
 	"uid": "` + game_uid + `"
 }`
 
-	salt1 := "rtvTthKxEyreVXQCnhluFgLXPOFKPHlA"
-	time1 := fmt.Sprint(time.Now().Unix())
-	//random1 := "ysun65"
-	random1 := randomPassword()[0:6]
-	md51 := fmt.Sprintf("%x", md5.Sum([]byte("salt=" + salt1 + "&t=" + time1 + "&r=" + random1)))
-
-	head := make(map[string]string)
-	head["User-Agent"] = "Android; miHoYoBBS/2.71.1"
-	head["Cookie"] = cookie
+	head := mhyCommonHeader(cookie)
 	head["Content-Type"] = "application/json"
-	head["x-rpc-device_id"] = "F84E53D45BFE4424ABEA9D6F0205FF4A"
-	head["x-rpc-app_version"] = "2.71.1"
-	head["x-rpc-client_type"] = "5"
-	head["DS"] = time1 + "," + random1 + "," + md51
 	head["x-rpc-signgame"] = urls[serverRegion][game].signgame
 
 	res, err := curl("POST", urls[serverRegion][game].signUrl, data1, head)
@@ -646,8 +649,7 @@ func sign(serverRegion int, game string, region string, game_uid string, cookie 
 }
 func signCheck(serverRegion int, game string, region string, game_uid string, cookie string) string {
 	url := urls[serverRegion][game].checkSignUrl + "?act_id=" + urls[serverRegion][game].act_id + "&region=" + region + "&uid=" + game_uid
-	head := make(map[string]string)
-	head["Cookie"] = cookie
+	head := mhyCommonHeader(cookie)
 	head["x-rpc-signgame"] = urls[serverRegion][game].signgame
 	res, err := curl("GET", url, "",  head)
 	time.Sleep(time.Second * 1)
@@ -666,7 +668,7 @@ func signCheck(serverRegion int, game string, region string, game_uid string, co
 					return "0"
 				}
 			} else {
-				fmt.Println("出错")
+				//fmt.Println("出错")
 				message := readValueInString(res.Body, "message")
 				fmt.Println(message)
 				return message
@@ -704,8 +706,7 @@ func checkMHYCookie(region string, cookie string) bool {
 
 	res, err := curl("GET", url, "", head)*/
 
-	head := make(map[string]string)
-	head["Cookie"] = cookie
+	head := mhyCommonHeader(cookie)
 	serverRegion, _ := strconv.Atoi(region)
 	res, err := curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
 	time.Sleep(time.Second * 1)
