@@ -88,7 +88,8 @@ func main() {
 		return
 	}
 
-		initUrls()
+	initUrls()
+
 	if cmd_Reset {
 		resetAdminPassword()
 		return
@@ -102,7 +103,6 @@ func main() {
 		return
 	}
 	if cmd_Sign {
-		//fmt.Println(urls[0]["崩坏3"].getRoleUrl)
 		ids, _ := readConfig("user", "id", 0)
 		//fmt.Println("_" + ids + "_")
 		if ids != "" {
@@ -117,7 +117,6 @@ func main() {
 		return
 	}
 
-	
 	// 没有指定操作，显示用法
 	useage()
 	return
@@ -496,9 +495,13 @@ func startSign(userid string) {
 					tmp := res.Body[strings.Index(res.Body, "\"list\"")+4:]
 					tmp = tmp[strings.Index(tmp, "[")+1:]
 					for i:=0; i<numOfAccount; i++ {
-						j:=i+1
-						fmt.Print("   [" + fmt.Sprint(j) + "] ")
-						NotifyMsg += "   [" + fmt.Sprint(j) + "] "
+						fmt.Print("   ")
+						NotifyMsg += "   "
+						if numOfAccount>1 {
+							circleNumber := []string {"①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"}
+							fmt.Print(circleNumber[i] + " ")
+							NotifyMsg += circleNumber[i] + " "
+						}
 						account := tmp[0:strings.Index(tmp, "}")]
 						tmp = tmp[strings.Index(tmp, "}")+1:]
 						region := readValueInString(account, "region")
@@ -606,13 +609,7 @@ func sign(serverRegion int, game string, region string, game_uid string, cookie 
 	head["x-rpc-signgame"] = urls[serverRegion][game].signgame
 
 	res, err := curl("POST", urls[serverRegion][game].signUrl, data1, head)
-	for i:=0;i<3;i++ {
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second * 1)
-		res, err = curl("POST", urls[serverRegion][game].signUrl, data1, head)
-	}
+	time.Sleep(time.Second * 1)
 	if err != nil {
 		//fmt.Print(err)
 		return fmt.Sprint(err)
@@ -711,13 +708,7 @@ func checkMHYCookie(region string, cookie string) bool {
 	head["Cookie"] = cookie
 	serverRegion, _ := strconv.Atoi(region)
 	res, err := curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
-	for i:=0;i<3;i++ {
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second * 1)
-		res, err = curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
-	}
+	time.Sleep(time.Second * 1)
 	if err == nil {
 		//fmt.Println(res.Body)
 		retcode := readValueInString(res.Body, "retcode")
@@ -2394,19 +2385,25 @@ func curl(method string, url string, data string, header map[string]string) (Htt
 		}
 		client := &http.Client{}
 		var res *http.Response
-		res, err = client.Do(req)
-		if err == nil {
-			//fmt.Println(res.StatusCode)
-			//fmt.Println(res.Header)
-			//fmt.Println(res.Body)
-			result.StatusCode = res.StatusCode
-			result.Header = res.Header
-			var body []byte
-			body, err = ioutil.ReadAll(res.Body)
+		q := 3
+		for result.StatusCode == 0 && q > 0 {
+			res, err = client.Do(req)
 			if err == nil {
-				//fmt.Println(string(body))
-				result.Body = string(body)
+				//fmt.Println(res.StatusCode)
+				//fmt.Println(res.Header)
+				//fmt.Println(res.Body)
+				result.StatusCode = res.StatusCode
+				result.Header = res.Header
+				var body []byte
+				body, err = ioutil.ReadAll(res.Body)
+				if err == nil {
+					//fmt.Println(string(body))
+					result.Body = string(body)
+					return result, err
+				}
 			}
+			q--
+			time.Sleep(time.Second * 1)
 		}
 	}
 	return result, err
