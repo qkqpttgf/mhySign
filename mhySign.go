@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.4.20250414_1048"
+	programVersion = "0.1.4.20250427_1331"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -68,7 +68,8 @@ func main() {
 	mainCtx, mainCancel = context.WithCancel(context.Background())
 	quit = make(chan int, 1)
 	defer close(quit)
-	defer waitExiting()
+	defer waitExiting(mainCancel)
+	go waitSYS(mainCancel, quit)
 
 	userhome = userHomeDir() + slash + ".config" + slash + programName
 	databaseFilename = "mhy.db"
@@ -204,19 +205,15 @@ func useage() {
 	//fmt.Print(html)
 	conlog(html)
 }
-func waitExiting() {
+func waitExiting(Cancel context.CancelFunc) {
 	select {
 		case <- mainCtx.Done() :
 			// ctx被杀掉了，说明有其它地方按ctrl c了
 			return
 		default :
-			mainCancel() // 没人杀，我来杀
+			Cancel() // 没人杀，我来杀
 			expireSecond := 10
 			go displayCountdown("等 ", expireSecond, "s 或按 ctrl+c 退出。", quit)
-			go func() {
-				waitSYS()
-				quit <- -1
-			}()
 			<- quit
 	}
 }
@@ -476,12 +473,14 @@ func startSign(userid string) {
 		if cookie["cookie"] == "" {
 			continue
 		}
-		fmt.Println(" " + cookie["label"] + ",")
-		NotifyMsg += cookie["label"] + ":\n"
+		if len(strings.Split(user["cookieIDs"], ","))>1 {
+			fmt.Println(cookie["label"] + ",")
+			NotifyMsg += cookie["label"] + ":\n"
+		}
 		serverRegion, _ := strconv.Atoi(cookie["region"])
 		for _, key := range games {
-			fmt.Print("  " + key + "，")
-			NotifyMsg += "  " + key + "，"
+			fmt.Print(" " + key + "，")
+			NotifyMsg += " " + key + "，"
 			head := mhyCommonHeader(cookie["cookie"])
 			res, err := curl("GET", urls[serverRegion][key].getRoleUrl, "",  head)
 			time.Sleep(time.Second * 1)
@@ -494,8 +493,8 @@ func startSign(userid string) {
 					tmp := res.Body[strings.Index(res.Body, "\"list\"")+4:]
 					tmp = tmp[strings.Index(tmp, "[")+1:]
 					for i:=0; i<numOfAccount; i++ {
-						fmt.Print("   ")
-						NotifyMsg += "   "
+						fmt.Print("  ")
+						NotifyMsg += "  "
 						if numOfAccount>1 {
 							circleNumber := []string {"①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"}
 							fmt.Print(circleNumber[i] + " ")
@@ -680,35 +679,18 @@ func signCheck(serverRegion int, game string, region string, game_uid string, co
 	}
 }
 func checkMHYCookie(region string, cookie string) bool {
-	/*url := "https://bbs-api.miyoushe.com/user/wapi/getUserFullInfo?gids=2"
+	/*head := mhyCommonHeader(cookie)
+	url := "https://bbs-api.miyoushe.com/user/wapi/getUserFullInfo?gids=2"
+	head["referer"] = "https://www.miyoushe.com/"
 	if region == "1" {
 		url = "https://bbs-api-os.hoyolab.com/community/user/wapi/getUserFullInfo?gid=2" // 弃用，需要程序在外网
-	}
-
-	salt1 := "rtvTthKxEyreVXQCnhluFgLXPOFKPHlA"
-	time1 := fmt.Sprint(time.Now().Unix())
-	random1 := "ysun65"
-	md51 := md5Sum("salt=" + salt1 + "&t=" + time1 + "&r=" + random1)
-
-	head := make(map[string]string)
-	head["User-Agent"] = "Android; miHoYoBBS/2.71.1"
-	head["Cookie"] = cookie
-	head["Content-Type"] = "application/json"
-	head["x-rpc-device_id"] = "F84E53D45BFE4424ABEA9D6F0205FF4A"
-	head["x-rpc-app_version"] = "2.71.1"
-	head["x-rpc-client_type"] = "5"
-	if region == "1" {
 		head["referer"] = "https://act.hoyolab.com/"
-	} else {
-		head["referer"] = "https://www.miyoushe.com/"
 	}
-	head["DS"] = time1 + "," + random1 + "," + md51
-
 	res, err := curl("GET", url, "", head)*/
 
 	head := mhyCommonHeader(cookie)
 	serverRegion, _ := strconv.Atoi(region)
-	res, err := curl("GET", urls[serverRegion]["崩坏3"].getRoleUrl, "",  head)
+	res, err := curl("GET", urls[serverRegion]["星穹铁道"].getRoleUrl, "",  head)
 	time.Sleep(time.Second * 1)
 	if err == nil {
 		//fmt.Println(res.Body)
@@ -841,20 +823,17 @@ func trash_getChar() string {
 	}
 
 }
-func waitSYS() {
+func waitSYS(Cancel context.CancelFunc, quit chan int) {
 	// 等候系统中断，比如按ctrl c
 	sysSignalQuit := make(chan os.Signal, 1)
 	defer close(sysSignalQuit)
 	signal.Notify(sysSignalQuit, syscall.SIGINT, syscall.SIGTERM)
 	<- sysSignalQuit
-	mainCancel()
+	Cancel()
 	fmt.Print("\n")
+	quit <- -1
 }
 func wait_Web() {
-	go func() {
-		waitSYS()
-		quit <- -1
-	}()
 	// 底部跑马灯文字
 	go displayHorseRaceLamp()
 	// 等ctrl c
@@ -867,10 +846,6 @@ func wait_Admin(expireSecond int) {
 	count := 0
 	// 底部跑马灯文字
 	go displayHorseRaceLamp()
-	go func() {
-		waitSYS()
-		quit <- -1
-	}()
 	// 判断超时
 	for count > -1 {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -1602,6 +1577,8 @@ Cookie：<br>
 			} else {
 				html += "否"
 			}
+			workWeiBotPre := "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key="
+			dingDingBotPre := "https://oapi.dingtalk.com/robot/send?access_token="
 			html += `<br>
 <a href="?log=view">查看签到历史</a><br>
 <form action="" method="post" name="form_notify" onsubmit="return notifyCheck(this);">
@@ -1609,13 +1586,13 @@ Cookie：<br>
 	<a href="https://github.com/qkqpttgf/mhySign" target=_blank>各种key获取方法</a>
 	<div>
 		企业微信机器人：<br>
-		https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=
+		` + workWeiBotPre + `
 		<input type="password" name="workWeiBotKey" value="` + user["workWeiBotKey"] + `">
 		<br>
 	</div>
 	<div>
 		钉钉机器人：<br>
-		https://oapi.dingtalk.com/robot/send?access_token=
+		` + dingDingBotPre + `
 		<input type="password" name="dingDingBotToken" value="` + user["dingDingBotToken"] + `">
 		<br>
 	</div>
@@ -1636,39 +1613,59 @@ Cookie：<br>
 <br>
 <script>
 function notifyCheck(e) {
+	if (e.workWeiBotKey.value != "") {
+		let tmp = e.workWeiBotKey.value;
+		let preStr = "` + workWeiBotPre + `";
+		if (tmp.indexOf(preStr)>-1) {
+			e.workWeiBotKey.value = tmp.substr(preStr.length);
+		}
+	}
+	if (e.dingDingBotToken.value != "") {
+		let tmp = e.dingDingBotToken.value;
+		let preStr = "` + dingDingBotPre + `";
+		if (tmp.indexOf(preStr)>-1) {
+			e.dingDingBotToken.value = tmp.substr(preStr.length);
+		}
+	}
 	if (e.SC3Key.value != "") {
 		let tmp = e.SC3Key.value;
-		if (tmp.substr(0,4) == "sctp") {
-			tmp = tmp.substr(4);
-			let t = tmp.indexOf("t");
-			if (t>0) {
-				let n = tmp.substr(0,t)*1;
-				if (n>0) return true;
-			}
+		if (tmp.substr(0,4) != "sctp") {
+			alert("方糖Server酱3 SendKey 不对");
+			return false;
 		}
-		alert("方糖Server酱3 SendKey 不对");
-		return false;
+		tmp = tmp.substr(4);
+		let t = tmp.indexOf("t");
+		if (t<1) {
+			alert("方糖Server酱3 SendKey 不对");
+			return false;
+		}
+		let n = tmp.substr(0,t);
+		if (n*1!==n) {
+			alert("方糖Server酱3 SendKey 不对");
+			return false;
+		}
 	}
 	return true;
 }
 </script>
 <h5>Cookie设置：</h5>
-<a href="?cookie=add">添加cookie</a><br>
-`
+<a href="?cookie=add">添加cookie</a><br>`
 			if len(user["cookieIDs"])>0 {
 				html += `
 <table border="1">
-	<tr><td>id</td><td>标签</td><td>区域</td><td>cookie</td><td>操作</td></tr>`
+	<tr><td>标签</td><td>区域</td><td>cookie</td><td>操作</td></tr>`
 				for _, cookieid1 := range strings.Split(user["cookieIDs"], ",") {
 					if cookieid1 != "" {
-						cookieid, _ := strconv.Atoi(cookieid1)
+						cookieid, err := strconv.Atoi(cookieid1)
+						if err != nil || cookieid < 1 {
+							continue
+						}
 						result, _ := readConfig("cookie", "label,region,cookie", cookieid)
 						//fmt.Println(result, err)
 						if result != "" {
 							res := strings.Split(result, "|")
 							html += `
 	<tr>
-		<td>` + fmt.Sprint(cookieid) + `</td>
 		<td>` + res[0] + `</td>
 		<td>`
 							if res[1] == "1" {
@@ -1679,8 +1676,8 @@ function notifyCheck(e) {
 							html += `</td>
 		<td><input type="text" value="` + res[2] + `" readonly></input></td>
 		<td>
-			<form action="?cookie=del&id=` + fmt.Sprint(cookieid) + `" method="post" name="form_cookie_del" onsubmit="return confirm('是否要删除` + res[0] + `？')" style="margin: 0">
-				<a href="?cookie=modify&id=` + fmt.Sprint(cookieid) + `">修改</a>
+			<form action="?cookie=del&id=` + cookieid1 + `" method="post" name="form_cookie_del" onsubmit="return confirm('是否要删除` + res[0] + `？')" style="margin: 0">
+				<a href="?cookie=modify&id=` + cookieid1 + `">修改</a>
 				<button name="form_cookie_del">删除</button>
 			</form>
 		</td>
@@ -1878,7 +1875,6 @@ func route_admin(w http.ResponseWriter, r *http.Request) {
 				if formHasKey(r.PostForm, "user_reset") {
 				//if r.PostForm.Has("user_reset") {
 					id, _ := strconv.Atoi(data.Get("id"))
-					//fmt.Println("reset", id)
 					values := make(map[string]string)
 					password := randomPassword()
 					values["password"] = password
@@ -2210,7 +2206,7 @@ func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 	用户名: <input name="user" type="text"><br>
 	密码: <input name="pass" type="password"><br>
 	再次输入密码: <input name="pass1" type="password"><br>
-	<button>提交</button>
+	<button>注册</button>
 <form>
 <script>
 	document.form1.user.focus();
@@ -2261,15 +2257,16 @@ func checkUserShowLoginPage(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	//conlog("Login page\n")
-	html += "<title>登录</title>"
+	html += `<title>登录</title>`
 	if readSetting("enableRegist") == "1" {
-		html += `<a href="?adduser=regist">注册</a><br>`
+		html += `
+<a href="?adduser=regist">注册</a>`
 	}
-	html += `登录
+	html += `
 <form action="" method="post" name="form1">
 	用户名: <input name="user" type="text"><br>
 	密码: <input name="pass" type="password"><br>
-	<button>提交</button>
+	<button>登录</button>
 <form>
 <script>
 	document.form1.user.focus();
