@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.4.20250427_1331"
+	programVersion = "0.1.5.20250515_1630"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -553,28 +553,28 @@ func startSign(userid string) {
 	NotifyMsg = endTime + "\n" + NotifyMsg
 
 	if user["workWeiBotKey"] != "" {
-		NotifyResult := WorkWeiBot(user["workWeiBotKey"], NotifyTitle + "\n" + NotifyMsg)
+		NotifyResult, _ := unicode2hanzi(WorkWeiBot(user["workWeiBotKey"], NotifyTitle + "\n" + NotifyMsg))
 		fmt.Println("企业微信通知：", NotifyResult)
 		logMsg += "\n" + "企业微信通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置企业微信通知")
 	}
 	if user["dingDingBotToken"] != "" {
-		NotifyResult := DingDingBot(user["dingDingBotToken"], NotifyTitle + "\n" + NotifyMsg)
+		NotifyResult, _ := unicode2hanzi(DingDingBot(user["dingDingBotToken"], NotifyTitle + "\n" + NotifyMsg))
 		fmt.Println("钉钉通知：", NotifyResult)
 		logMsg += "\n" + "钉钉通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置钉钉通知")
 	}
 	if user["SCTKey"] != "" {
-		NotifyResult := FTSC(user["SCTKey"], NotifyTitle, NotifyMsg)
+		NotifyResult, _ := unicode2hanzi(FTSC(user["SCTKey"], NotifyTitle, NotifyMsg))
 		fmt.Println("Server酱T通知：", NotifyResult)
 		logMsg += "\n" + "Server酱T通知：" + NotifyResult
 	} else {
 		fmt.Println("未设置Server酱T通知")
 	}
 	if user["SC3Key"] != "" {
-		NotifyResult := FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg)
+		NotifyResult, _ := unicode2hanzi(FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg))
 		fmt.Println("Server酱3通知：", NotifyResult)
 		logMsg += "\n" + "Server酱3通知：" + NotifyResult
 	} else {
@@ -705,7 +705,15 @@ func checkMHYCookie(region string, cookie string) bool {
 	}
 	return false
 }
+func unicode2hanzi(raw string) (string, error) {
+	str, err := strconv.Unquote(strings.ReplaceAll(strconv.Quote(raw), `\\u`, `\u`))
+	if err != nil {
+		return raw, err
+	}
+	return str, nil
+}
 func saveLog(userID string, signTime string, log string) {
+	log = strings.ReplaceAll(log, "\r", "\\r")
 	log = strings.ReplaceAll(log, "\n", "\\n")
 	sql := `insert into log (userID, signTime, log) values ("` + userID + `", "` + signTime + `", '` + log + `');`
 	res, err := sqlite(sql)
@@ -1522,7 +1530,8 @@ Cookie：<br>
 				if result_a != "" {
 					html += `
 <table border="1">`
-					for _, result_b := range strSplitLine(result_a) {
+					for _, result_b := range strings.Split(result_a, "\n") {
+					//for _, result_b := range strSplitLine(result_a) {
 						if result_b != "" {
 							result := strings.Split(result_b, "|")
 							html += `
