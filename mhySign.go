@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.5.20250515_1630"
+	programVersion = "0.1.5.20250601_2115"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -218,8 +218,16 @@ func waitExiting(Cancel context.CancelFunc) {
 	}
 }
 func initUrls() {
-	games = []string {"崩坏3", "原神", "星穹铁道", "绝区零"}
+	games = []string {"崩坏2", "崩坏3", "原神", "星穹铁道", "绝区零"}
 	urls_cn := make(map[string]Links)
+	var bh2_cn Links
+	bh2_cn.getRoleUrl = "https://api-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie?game_biz=bh2_cn"
+	bh2_cn.checkSignUrl="https://api-takumi.mihoyo.com/event/luna/info"
+	bh2_cn.signUrl="https://api-takumi.mihoyo.com/event/luna/sign"
+	bh2_cn.act_id="e202203291431091"
+	bh2_cn.signgame="bh2"
+	urls_cn["崩坏2"] = bh2_cn
+
 	var bh3_cn Links
 	bh3_cn.getRoleUrl = "https://api-takumi.mihoyo.com/binding/api/getUserGameRolesByCookie?game_biz=bh3_cn"
 	bh3_cn.checkSignUrl="https://api-takumi.mihoyo.com/event/luna/info"
@@ -479,8 +487,10 @@ func startSign(userid string) {
 		}
 		serverRegion, _ := strconv.Atoi(cookie["region"])
 		for _, key := range games {
+			if urls[serverRegion][key].getRoleUrl == "" {
+				continue
+			}
 			fmt.Print(" " + key + "，")
-			NotifyMsg += " " + key + "，"
 			head := mhyCommonHeader(cookie["cookie"])
 			res, err := curl("GET", urls[serverRegion][key].getRoleUrl, "",  head)
 			time.Sleep(time.Second * 1)
@@ -489,7 +499,10 @@ func startSign(userid string) {
 				if retcode == "0" {
 					numOfAccount := strings.Count(res.Body, "game_uid")
 					fmt.Println("有" + fmt.Sprint(numOfAccount) + "个角色")
-					NotifyMsg += "有" + fmt.Sprint(numOfAccount) + "个角色\n"
+					if numOfAccount > 0 {
+						NotifyMsg += " " + key + "，"
+						NotifyMsg += "有" + fmt.Sprint(numOfAccount) + "个角色\n"
+					}
 					tmp := res.Body[strings.Index(res.Body, "\"list\"")+4:]
 					tmp = tmp[strings.Index(tmp, "[")+1:]
 					for i:=0; i<numOfAccount; i++ {
