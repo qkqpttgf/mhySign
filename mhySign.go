@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.5.20250623_1523"
+	programVersion = "0.1.5.20250623_1603"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -1574,20 +1574,67 @@ Cookie：<br>
 				if formHasKey(r.PostForm, "form_notify") {
 				//if r.PostForm.Has("form_notify") {
 					values := make(map[string]string)
-					values["workWeiBotKey"] = data.Get("workWeiBotKey")
-					values["dingDingBotToken"] = data.Get("dingDingBotToken")
-					values["SCTKey"] = data.Get("SCTKey")
-					values["SC3Key"] = data.Get("SC3Key")
-					err := saveConfig("user", values, userid)
-					if err == nil {
-						html := `保存成功！<br>
+					if data.Get("workWeiBotKey") != user["workWeiBotKey"] {
+						if "" != data.Get("workWeiBotKey") {
+							res := WorkWeiBot(data.Get("workWeiBotKey"), "签到推送测试");
+							if "成功" != res {
+								html := `企业微信机器人推送失败：` + res
+								htmlOutput(w, html, 400, nil)
+								return
+							}
+						}
+						values["workWeiBotKey"] = data.Get("workWeiBotKey")
+					}
+					if data.Get("dingDingBotToken") != user["dingDingBotToken"] {
+						if "" != data.Get("dingDingBotToken") {
+							res := DingDingBot(data.Get("dingDingBotToken"), "签到推送测试");
+							if "成功" != res {
+								html := `钉钉机器人推送失败：` + res
+								htmlOutput(w, html, 400, nil)
+								return
+							}
+						}
+						values["dingDingBotToken"] = data.Get("dingDingBotToken")
+					}
+					if data.Get("SCTKey") != user["SCTKey"] {
+						if "" != data.Get("SCTKey") {
+							res := FTSC(data.Get("SCTKey"), "签到", "推送测试");
+							if "成功" != res {
+								html := `方糖Server酱Turbo版推送失败：` + res
+								htmlOutput(w, html, 400, nil)
+								return
+							}
+						}
+						values["SCTKey"] = data.Get("SCTKey")
+					}
+					if data.Get("SC3Key") != user["SC3Key"] {
+						if "" != data.Get("SC3Key") {
+							res := FTSC3(data.Get("SC3Key"), "签到", "推送测试");
+							if "成功" != res {
+								html := `方糖Server3酱推送失败：` + res
+								htmlOutput(w, html, 400, nil)
+								return
+							}
+						}
+						values["SC3Key"] = data.Get("SC3Key")
+					}
+					if len(values) > 0 {
+						err := saveConfig("user", values, userid)
+						if err == nil {
+							html := `保存成功！<br>
+<meta http-equiv="refresh" content="2;URL=` + path + `">`
+							htmlOutput(w, html, 200, nil)
+							return
+						}
+						html := `保存失败：` + fmt.Sprint(err)
+						htmlOutput(w, html, 400, nil)
+						return
+					} else {
+						html := `无变化！<br>
 <meta http-equiv="refresh" content="2;URL=` + path + `">`
 						htmlOutput(w, html, 200, nil)
 						return
 					}
-					html := `保存失败：` + fmt.Sprint(err)
-					htmlOutput(w, html, 400, nil)
-					return
 				}
 			}
 			html := `
