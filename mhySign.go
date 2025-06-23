@@ -60,7 +60,7 @@ type Links struct {
 
 func main() {
 	programName = "mhySign"
-	programVersion = "0.1.5.20250601_2115"
+	programVersion = "0.1.5.20250623_1523"
 	programAuthor = "ysun"
 	conlog(passlog("程序启动") + "\n")
 	fmt.Println("  版本：" + programVersion)
@@ -1662,7 +1662,7 @@ function notifyCheck(e) {
 			return false;
 		}
 		let n = tmp.substr(0,t);
-		if (n*1!==n) {
+		if (!/^[0-9]*$/.test(n)) {
 			alert("方糖Server酱3 SendKey 不对");
 			return false;
 		}
