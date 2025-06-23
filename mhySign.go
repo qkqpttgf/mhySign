@@ -588,10 +588,10 @@ func startSign(userid string) {
 	}
 	if user["SC3Key"] != "" {
 		NotifyResult, _ := unicode2hanzi(FTSC3(user["SC3Key"], NotifyTitle, NotifyMsg))
-		fmt.Println("Server酱3通知：", NotifyResult)
-		logMsg += "\n" + "Server酱3通知：" + NotifyResult
+		fmt.Println("Server3酱通知：", NotifyResult)
+		logMsg += "\n" + "Server3酱通知：" + NotifyResult
 	} else {
-		fmt.Println("未设置Server酱3通知")
+		fmt.Println("未设置Server3酱通知")
 	}
 	saveLog(userid, (time.Now()).Format(layout), logMsg)
 }
@@ -1578,6 +1578,7 @@ Cookie：<br>
 						if "" != data.Get("workWeiBotKey") {
 							res := WorkWeiBot(data.Get("workWeiBotKey"), "签到推送测试");
 							if "成功" != res {
+								res, _ = unicode2hanzi(res)
 								html := `企业微信机器人推送失败：` + res
 								htmlOutput(w, html, 400, nil)
 								return
@@ -1589,6 +1590,7 @@ Cookie：<br>
 						if "" != data.Get("dingDingBotToken") {
 							res := DingDingBot(data.Get("dingDingBotToken"), "签到推送测试");
 							if "成功" != res {
+								res, _ = unicode2hanzi(res)
 								html := `钉钉机器人推送失败：` + res
 								htmlOutput(w, html, 400, nil)
 								return
@@ -1600,6 +1602,7 @@ Cookie：<br>
 						if "" != data.Get("SCTKey") {
 							res := FTSC(data.Get("SCTKey"), "签到", "推送测试");
 							if "成功" != res {
+								res, _ = unicode2hanzi(res)
 								html := `方糖Server酱Turbo版推送失败：` + res
 								htmlOutput(w, html, 400, nil)
 								return
@@ -1611,6 +1614,7 @@ Cookie：<br>
 						if "" != data.Get("SC3Key") {
 							res := FTSC3(data.Get("SC3Key"), "签到", "推送测试");
 							if "成功" != res {
+								res, _ = unicode2hanzi(res)
 								html := `方糖Server3酱推送失败：` + res
 								htmlOutput(w, html, 400, nil)
 								return
@@ -1672,7 +1676,7 @@ Cookie：<br>
 		<br>
 	</div>
 	<div>
-	<a href="https://sc3.ft07.com/sendkey">方糖Server酱(3)</a>：<br>
+	<a href="https://sc3.ft07.com/sendkey">方糖Server3酱</a>：<br>
 		SendKey：
 		<input type="password" name="SC3Key" value="` + user["SC3Key"] + `">
 		<br>
@@ -1699,18 +1703,18 @@ function notifyCheck(e) {
 	if (e.SC3Key.value != "") {
 		let tmp = e.SC3Key.value;
 		if (tmp.substr(0,4) != "sctp") {
-			alert("方糖Server酱3 SendKey 不对");
+			alert("方糖Server3酱 SendKey 不对");
 			return false;
 		}
 		tmp = tmp.substr(4);
 		let t = tmp.indexOf("t");
 		if (t<1) {
-			alert("方糖Server酱3 SendKey 不对");
+			alert("方糖Server3酱 SendKey 不对");
 			return false;
 		}
 		let n = tmp.substr(0,t);
 		if (!/^[0-9]*$/.test(n)) {
-			alert("方糖Server酱3 SendKey 不对");
+			alert("方糖Server3酱 SendKey 不对");
 			return false;
 		}
 	}
